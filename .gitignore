@@ -1,0 +1,12 @@
+# meson output
+build
+
+# anyloop lib
+libaylp
+
+# basler fgsdk
+libfgsdk
+
+# alpao config files
+BAX*
+
