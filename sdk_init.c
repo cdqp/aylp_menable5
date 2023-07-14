@@ -1,20 +1,21 @@
 #include <stdio.h>
-#include <time.h>
+#include <stdlib.h>
 
-#include <basler_fg.h>
+#include "basler_fg.h"
 
-int main()
+int main(int argc, char **argv)
 {
 	Fg_Struct *fg = NULL;
 	int camPort = PORT_A;
-	frameindex_t nrOfFrames = GRAB_INFINITE;
-	frameindex_t nbBuffers = 1;
-	// not sure if the acquisition that we start here has to have anything
-	// to do with the acquisition we do later with our own code
-	unsigned int width = 80;
-	unsigned int height = 80;
-	int samplePerPixel = 1;
-	size_t bytePerSample = 1;
+
+	if (argc != 3) {
+		puts("Usage: sdk_init width_in_px height_in_px\n");
+		return -1;
+	}
+
+	unsigned long width = strtoul(argv[1], 0, 0);
+	unsigned long height = strtoul(argv[2], 0, 0);
+	printf("Okay, initializing for %lu by %lu capture\n", width, height);
 
 	int status = Fg_InitLibraries(0);
 	if (status != FG_OK) {
@@ -22,10 +23,7 @@ int main()
 		return FG_ERROR;
 	}
 
-	int boardNr = 0;
-	char *applet = "Acq_SingleFullAreaGray";
-
-	fg = Fg_Init(applet, boardNr);
+	fg = Fg_Init("Acq_SingleFullAreaGray", 0);
 	if (fg == NULL) {
 		fprintf(stderr, "error in Fg_Init: %s\n",
 			Fg_getLastErrorDescription(NULL)
@@ -33,11 +31,7 @@ int main()
 		return FG_ERROR;
 	}
 
-	// Calculate buffer size (careful to avoid integer arithmetic
-	// overflows!) and allocate memory.
-	size_t totalBufferSize = (size_t) width * height * samplePerPixel
-		* bytePerSample * nbBuffers;
-	dma_mem *mem = Fg_AllocMemEx(fg, totalBufferSize, nbBuffers);
+	dma_mem *mem = Fg_AllocMemEx(fg, width*height, 1);
 	if (!mem) {
 		fprintf(stderr, "error in Fg_AllocMemEx: %s\n",
 			Fg_getLastErrorDescription(fg)
@@ -75,8 +69,9 @@ int main()
 		return FG_ERROR;
 	}
 
-	puts("FG_ACQUIREEX CALL"); fflush(stdout);
-	if (Fg_AcquireEx(fg,camPort,nrOfFrames,ACQ_BLOCK,mem) < 0) {
+	//puts("FG_ACQUIREEX CALL"); fflush(stdout);
+	// start an acquisition for one frame
+	if (Fg_AcquireEx(fg, camPort, 1, ACQ_BLOCK, mem) < 0) {
 		fprintf(stderr, "Fg_AcquireEx() failed: %s\n",
 			Fg_getLastErrorDescription(fg)
 		);
@@ -84,7 +79,7 @@ int main()
 		Fg_FreeGrabber(fg);
 		return FG_ERROR;
 	}
-	puts("FG_ACQUIREEX RET"); fflush(stdout);
+	//puts("FG_ACQUIREEX RET"); fflush(stdout);
 
 	// stopAcquire somehow ruins the no-sdk code
 	//Fg_stopAcquire(fg, camPort);
@@ -93,6 +88,7 @@ int main()
 	//Fg_FreeGrabber(fg);
 	Fg_FreeLibraries();
 
+	puts("Done.\n");
 	return FG_OK;
 }
 

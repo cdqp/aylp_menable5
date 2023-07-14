@@ -14,8 +14,9 @@ fgsdk_dep = c.find_library(
 	dirs: join_paths(meson.source_root(), 'libfgsdk/lib'),
 	required: true
 )
+gsl_dep = dependency('gsl')
 json_dep = dependency('json-c')
-deps = [fgsdk_dep, json_dep]
+deps = [fgsdk_dep, gsl_dep, json_dep]
 
 executable('sdk_init', 'sdk_init.c',
 	install: true,

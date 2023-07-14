@@ -49,4 +49,6 @@ I've yet to write code to replay those messages.
 As such, just run the `sdk_init` binary which I *think* takes care of
 initialization until other code using the Basler SDK is run.
 
+Note that the `sdk_init` binary determines the width and height of the acquired
+image.
 

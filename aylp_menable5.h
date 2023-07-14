@@ -98,6 +98,7 @@ struct aylp_menable5_data {
 	size_t width;
 	size_t height;
 	size_t bytes_per_px;
+	double pitch;
 	// parameters for initialization
 	struct mm_create_s creation;
 	struct men_io_range memory;
@@ -105,7 +106,7 @@ struct aylp_menable5_data {
 	// file descriptor to the frame grabber
 	int fg;
 	// framebuffer (gets put into the state every round)
-	char const *fb;
+	gsl_block_uchar fb;
 };
 
 // initialize menable5 device

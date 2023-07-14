@@ -26,6 +26,9 @@ int aylp_menable5_init(struct aylp_device *self)
 	self->process = &aylp_menable5_process;
 	self->close = &aylp_menable5_close;
 
+	// set default params
+	data->pitch = 0.0;
+
 	// parse the params json into our data struct
 	if (!self->params) {
 		log_error("No params object found.");
@@ -43,6 +46,9 @@ int aylp_menable5_init(struct aylp_device *self)
 		} else if (!strcmp(key, "bytes_per_px")) {
 			data->bytes_per_px = json_object_get_uint64(val);
 			log_trace("bytes_per_px = %llu", data->bytes_per_px);
+		} else if (!strcmp(key, "pitch")) {
+			data->pitch = json_object_get_double(val);
+			log_trace("pitch = %E", data->pitch);
 		} else {
 			log_warn("Unknown parameter \"%s\"", key);
 		}
@@ -97,7 +103,7 @@ int aylp_menable5_init(struct aylp_device *self)
 	// allocate our own buffer
 	data->memory.start = (uint64_t)xmalloc(data->memory.length);
 	// copy the pointer to data->fb for ease of access
-	data->fb = (char const *)data->memory.start;
+	data->fb.data = (unsigned char *)data->memory.start;
 	// data->memory is now fully initialized
 
 	// tell the driver about our buffer
@@ -126,8 +132,8 @@ int aylp_menable5_init(struct aylp_device *self)
 	// set types and units
 	self->type_in = AYLP_T_ANY;
 	self->units_in = AYLP_U_ANY;
-	self->type_out = AYLP_T_VECTOR;
-	self->units_out = AYLP_U_MINMAX;
+	self->type_out = AYLP_T_BYTES;
+	self->units_out = AYLP_U_COUNTS;
 
 	return 0;
 }
@@ -178,10 +184,26 @@ int aylp_menable5_process(struct aylp_device *self, struct aylp_state *state)
 	// yes, I know, unions are a thing, but I'm using the driver's struct
 	// verbatim, and this is fun and cursed ;)
 	// (men_io_bufidx is technically a union of the struct and a size_t)
-	size_t imglen = *(size_t *)(void *)&bufidx;
-	log_trace("Got image of length: %lu\n", imglen);
-	// TODO: multithreaded centroiding
-	UNUSED(state);
+	// and apparently you multiply by 4 for some reason (I think the
+	// DMA_LENGTH is a count of number of longs)
+	size_t imglen = *(size_t *)(void *)&bufidx * 4;
+	log_trace("Got image of length %lu", imglen);
+	if (data->height * data->width != imglen) {
+		log_error("Image is only %llu long, but you specified width of "
+			"%llu and height of %llu; run sdk_init again?",
+			imglen, data->width, data->height
+		);
+	}
+	data->fb.size = imglen;
+	// zero-copy update of pipeline state
+	state->bytes = &data->fb;
+	// housekeeping on the header
+	state->header.type = self->type_out;
+	state->header.units = self->units_out;
+	state->header.log_dim.y = data->height;
+	state->header.log_dim.x = data->width;
+	state->header.pitch.y = data->pitch;
+	state->header.pitch.x = data->pitch;
 	return 0;
 }
 
@@ -191,8 +213,8 @@ int aylp_menable5_close(struct aylp_device *self)
 	struct aylp_menable5_data *data = self->device_data;
 	ioctl(data->fg, MEN_IOC(FG_STOP_CMD,0), data->control.chan);
 	ioctl(data->fg, MEN_IOC(FREE_VIRT_BUFFER,0), data->memory.headnr);
-	free((char *)data->fb); data->fb = 0;
-	free(data); self->device_data = 0;
+	xfree(data->fb.data);
+	xfree(data);
 	return 0;
 }
 
