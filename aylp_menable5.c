@@ -12,7 +12,9 @@
 #include "xalloc.h"
 #include "aylp_menable5.h"
 
-// do we want to consider 10-bit packed? kinda doubt it'd be worth it.
+// we currently assume that each pixel is 1 byte. do we want to support other
+// formats, like color or 10-bit packed? we'd need to output other types ...
+// like maybe a gsl_matrix_long
 
 // max tries to get a frame
 static const size_t max_tries = 10000;
@@ -43,9 +45,6 @@ int aylp_menable5_init(struct aylp_device *self)
 		} else if (!strcmp(key, "height")) {
 			data->height = json_object_get_uint64(val);
 			log_trace("height = %llu", data->height);
-		} else if (!strcmp(key, "bytes_per_px")) {
-			data->bytes_per_px = json_object_get_uint64(val);
-			log_trace("bytes_per_px = %llu", data->bytes_per_px);
 		} else if (!strcmp(key, "pitch")) {
 			data->pitch = json_object_get_double(val);
 			log_trace("pitch = %E", data->pitch);
@@ -54,10 +53,8 @@ int aylp_menable5_init(struct aylp_device *self)
 		}
 	}
 	// make sure we didn't miss any params
-	if (!data->width || !data->height || !data->bytes_per_px) {
-		log_error("You must provide the following nonzero params: "
-			"width, height, bytes_per_px"
-		);
+	if (!data->width || !data->height) {
+		log_error("You must provide nonzero width and height params");
 		return -1;
 	}
 
@@ -66,7 +63,7 @@ int aylp_menable5_init(struct aylp_device *self)
 	data->creation.maxsize = UINT64_MAX;
 	data->creation.subbufs = 1;
 	// and we need to make enough room for that subbuf
-	data->memory.length = data->width * data->height * data->bytes_per_px;
+	data->memory.length = data->width * data->height;
 	data->memory.subnr = 0;
 	// .start and .headnr uninitialized
 	// we'll want to capture in blocking mode, indefinitely
@@ -101,9 +98,8 @@ int aylp_menable5_init(struct aylp_device *self)
 	log_debug("Got head number %d\n", data->memory.headnr);
 
 	// allocate our own buffer
-	data->memory.start = (uint64_t)xmalloc(data->memory.length);
-	// copy the pointer to data->fb for ease of access
-	data->fb.data = (unsigned char *)data->memory.start;
+	data->fb = xcalloc_type(gsl_matrix_uchar, data->width, data->height);
+	data->memory.start = (unsigned long)data->fb->data;
 	// data->memory is now fully initialized
 
 	// tell the driver about our buffer
@@ -132,7 +128,7 @@ int aylp_menable5_init(struct aylp_device *self)
 	// set types and units
 	self->type_in = AYLP_T_ANY;
 	self->units_in = AYLP_U_ANY;
-	self->type_out = AYLP_T_BYTES;
+	self->type_out = AYLP_T_MATRIX_UCHAR;
 	self->units_out = AYLP_U_COUNTS;
 
 	return 0;
@@ -189,14 +185,14 @@ int aylp_menable5_process(struct aylp_device *self, struct aylp_state *state)
 	size_t imglen = *(size_t *)(void *)&bufidx * 4;
 	log_trace("Got image of length %lu", imglen);
 	if (data->height * data->width != imglen) {
-		log_error("Image is only %llu long, but you specified width of "
-			"%llu and height of %llu; run sdk_init again?",
+		log_error("Image is %llu long, but you specified width of %llu "
+			"and height of %llu; run sdk_init again?",
 			imglen, data->width, data->height
 		);
+		return -1;
 	}
-	data->fb.size = imglen;
 	// zero-copy update of pipeline state
-	state->bytes = &data->fb;
+	state->matrix_uchar = data->fb;
 	// housekeeping on the header
 	state->header.type = self->type_out;
 	state->header.units = self->units_out;
@@ -213,7 +209,7 @@ int aylp_menable5_close(struct aylp_device *self)
 	struct aylp_menable5_data *data = self->device_data;
 	ioctl(data->fg, MEN_IOC(FG_STOP_CMD,0), data->control.chan);
 	ioctl(data->fg, MEN_IOC(FREE_VIRT_BUFFER,0), data->memory.headnr);
-	xfree(data->fb.data);
+	xfree_type(gsl_matrix_uchar, data->fb);
 	xfree(data);
 	return 0;
 }

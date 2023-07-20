@@ -106,7 +106,7 @@ struct aylp_menable5_data {
 	// file descriptor to the frame grabber
 	int fg;
 	// framebuffer (gets put into the state every round)
-	gsl_block_uchar fb;
+	gsl_matrix_uchar *fb;
 };
 
 // initialize menable5 device
