@@ -41,13 +41,16 @@ int aylp_menable5_init(struct aylp_device *self)
 			// keys starting with _ are comments
 		} else if (!strcmp(key, "width")) {
 			data->width = json_object_get_uint64(val);
-			log_trace("width = %llu", data->width);
+			log_trace("width = %zu", data->width);
 		} else if (!strcmp(key, "height")) {
 			data->height = json_object_get_uint64(val);
-			log_trace("height = %llu", data->height);
+			log_trace("height = %zu", data->height);
+		} else if (!strcmp(key, "bytes_per_px")) {
+			data->bytes_per_px = json_object_get_uint64(val);
+			log_trace("bytes_per_px = %zu", data->bytes_per_px);
 		} else if (!strcmp(key, "pitch")) {
 			data->pitch = json_object_get_double(val);
-			log_trace("pitch = %E", data->pitch);
+			log_trace("pitch = %G", data->pitch);
 		} else {
 			log_warn("Unknown parameter \"%s\"", key);
 		}
@@ -169,7 +172,7 @@ int aylp_menable5_process(struct aylp_device *self, struct aylp_state *state)
 		}
 	}
 	if (UNLIKELY(i == max_tries)) {
-		log_error("Hit max tries (%llu) for frame read", max_tries);
+		log_error("Hit max tries (%zu) for frame read", max_tries);
 		return -1;
 	}
 	err = ioctl(data->fg, MEN_IOC(DMA_LENGTH,bufidx), &bufidx);
@@ -183,10 +186,10 @@ int aylp_menable5_process(struct aylp_device *self, struct aylp_state *state)
 	// and apparently you multiply by 4 for some reason (I think the
 	// DMA_LENGTH is a count of number of longs)
 	size_t imglen = *(size_t *)(void *)&bufidx * 4;
-	log_trace("Got image of length %lu", imglen);
+	log_trace("Got image of length %zu", imglen);
 	if (data->height * data->width != imglen) {
-		log_error("Image is %llu long, but you specified width of %llu "
-			"and height of %llu; run sdk_init again?",
+		log_error("Image is %zu long, but you specified width of %zu "
+			"and height of %zu; run sdk_init again?",
 			imglen, data->width, data->height
 		);
 		return -1;
